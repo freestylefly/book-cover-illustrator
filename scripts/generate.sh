@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #
 # book-cover-illustrator 生图脚本
-# 调用 Canghe API 生成书籍章节配图
+# 调用 Canghe API 生成书籍配图（支持章节题图和场景插图）
 #
 # 用法:
 #   bash generate.sh --prompt "英文Prompt" --output "./ch4_cover.png"
+#   bash generate.sh --prompt "英文Prompt" --output "./ch4_cover.png" --ratio "4:3"
 #   bash generate.sh --prompt "英文Prompt" --output "./ch4_cover.png" --api-key "sk-xxx"
-#   bash generate.sh --prompt "英文Prompt" --output "./ch4_cover.png" --model "gemini-3.1-flash-image-preview"
 
 set -euo pipefail
 
@@ -17,6 +17,7 @@ OUTPUT="output.png"
 PROMPT=""
 API_KEY="${CANGHE_API_KEY:-}"
 MAX_RETRIES=1
+RATIO="16:9"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -31,6 +32,7 @@ usage() {
     echo "选项:"
     echo "  --prompt     生图 Prompt（英文，必填）"
     echo "  --output     输出文件路径（默认: output.png）"
+    echo "  --ratio      图片比例（默认: 16:9，可选: 4:3）"
     echo "  --api-key    Canghe API Key（可选，也可通过 CANGHE_API_KEY 环境变量设置）"
     echo "  --model      模型名称（默认: gemini-3.1-flash-image-preview）"
     echo "  --help       显示帮助信息"
@@ -42,6 +44,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --prompt)   PROMPT="$2"; shift 2 ;;
         --output)   OUTPUT="$2"; shift 2 ;;
+        --ratio)    RATIO="$2"; shift 2 ;;
         --api-key)  API_KEY="$2"; shift 2 ;;
         --model)    MODEL="$2"; shift 2 ;;
         --help)     usage ;;
@@ -59,6 +62,19 @@ if [[ -z "$API_KEY" ]]; then
     echo -e "${RED}错误: 未设置 API Key。请通过 --api-key 参数或 CANGHE_API_KEY 环境变量提供${NC}"
     exit 1
 fi
+
+# 比例校验
+if [[ "$RATIO" != "16:9" && "$RATIO" != "4:3" && "$RATIO" != "3:2" ]]; then
+    echo -e "${RED}错误: 不支持的比例 $RATIO（支持: 16:9, 4:3, 3:2）${NC}"
+    exit 1
+fi
+
+# 根据比例确定类型标签
+case "$RATIO" in
+    "16:9") TYPE_LABEL="章节题图" ;;
+    "4:3")  TYPE_LABEL="场景插图" ;;
+    "3:2")  TYPE_LABEL="场景插图" ;;
+esac
 
 # 确保输出目录存在
 OUTPUT_DIR=$(dirname "$OUTPUT")
@@ -136,10 +152,11 @@ sys.exit(1)
 
 # 主流程
 echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}  Book Cover Illustrator - 章节配图生成${NC}"
+echo -e "${BLUE}  Book Cover Illustrator - ${TYPE_LABEL}生成${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 echo -e "${YELLOW}模型:${NC} $MODEL"
+echo -e "${YELLOW}比例:${NC} $RATIO ($TYPE_LABEL)"
 echo -e "${YELLOW}输出:${NC} $OUTPUT"
 echo -e "${YELLOW}Prompt:${NC} ${PROMPT:0:80}..."
 echo ""
@@ -152,7 +169,7 @@ while [[ $attempt -le $MAX_RETRIES ]]; do
         echo -e "${YELLOW}第 $((attempt)) 次重试...${NC}"
     fi
 
-    echo -e "${BLUE}正在调用 Canghe API 生成图片...${NC}"
+    echo -e "${BLUE}正在调用 Canghe API 生成${TYPE_LABEL}...${NC}"
 
     RESPONSE=$(curl -s --max-time 120 \
         "$API_BASE" \
@@ -173,6 +190,7 @@ while [[ $attempt -le $MAX_RETRIES ]]; do
         SIZE=$(echo "$RESULT" | cut -d'|' -f2)
         echo ""
         echo -e "${GREEN}生成成功！${NC}"
+        echo -e "${GREEN}类型: $TYPE_LABEL ($RATIO)${NC}"
         echo -e "${GREEN}文件: $OUTPUT${NC}"
         echo -e "${GREEN}大小: $((SIZE / 1024)) KB${NC}"
         exit 0
